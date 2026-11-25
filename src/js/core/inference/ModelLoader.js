@@ -3,7 +3,6 @@ import * as tf from '@tensorflow/tfjs';
 
 const MODEL_PATH = '/models/yolov5n_web_model/model.json';
 const LABELS_PATH = '/models/yolov5n_web_model/labels.json';
-
 const CLASS_THRESHOLD = 0.5;
 
 /**

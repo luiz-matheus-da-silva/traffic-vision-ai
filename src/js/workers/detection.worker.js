@@ -4,6 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import { loadModelAndLabels } from '../core/inference/ModelLoader.js';
 import { preprocessImage } from '../core/inference/ImagePreprocessor.js';
 import { runInference } from '../core/inference/InferenceEngine.js';
+import { processDetections } from '../core/detection/DetectionProcessor.js';
 
 let model = null;
 let labels = [];
@@ -67,29 +68,37 @@ self.onmessage = async ({ data }) => {
         frame.close();
         frame = null;
 
-        // Executa a inferência e obtém as saídas do YOLOv5n.
+
         const outputs = await runInference(model, tensor);
 
-        const results = [];
+        let detections = [];
 
-        // Inspeciona o formato e os primeiros valores de cada saída.
-        for (const [index, output] of outputs.entries()) {
-            try {
-                results.push({
-                    index,
-                    shape: output.shape,
-                    values: Array.from(await output.data()).slice(0, 20)
-                });
-            } finally {
-                // Libera os tensores após extrair os dados.
-                output.dispose();
-            }
+        try {
+            // Extrai os dados dos quatro tensores retornados pelo YOLOv5n.
+            const [boxes, scores, classes, count] = await Promise.all(
+                outputs.map(async (output) => {
+                    return Array.from(await output.data());
+                })
+            );
+
+            // Converte os resultados do modelo em objetos JavaScript.
+            detections = processDetections(
+                {
+                    boxes,
+                    scores,
+                    classes,
+                    numDetections: count[0]
+                },
+                labels
+            );
+        } finally {
+            // Libera a memória dos tensores após o processamento.
+            outputs.forEach((output) => output.dispose());
         }
 
-        // Devolve os resultados para a Main Thread.
         self.postMessage({
             type: 'inference-completed',
-            outputs: results
+            detections
         });
 
     } catch (error) {

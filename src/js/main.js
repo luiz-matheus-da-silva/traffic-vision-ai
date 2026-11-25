@@ -141,10 +141,9 @@ worker.onmessage = ({ data }) => {
         case 'inference-completed':
             isProcessing = false;
 
-            console.log(
-                'Saídas completas do YOLOv5n:',
-                JSON.stringify(data.outputs, null, 2)
-            );
+            console.log('Detecções do YOLOv5n:', data.detections);
+
+            console.table(data.detections);
 
             break;
 
