@@ -57,9 +57,15 @@ self.onmessage = async ({ data }) => {
         return;
     }
 
+    let frame = data.frame;
+
     try {
         // Converte o frame recebido em um tensor compatível com o modelo.
         const tensor = preprocessImage(data.frame, 640, 640);
+
+        // O tensor já contém os pixels; o bitmap pode ser liberado.
+        frame.close();
+        frame = null;
 
         // Executa a inferência e obtém as saídas do YOLOv5n.
         const outputs = await runInference(model, tensor);
@@ -68,14 +74,16 @@ self.onmessage = async ({ data }) => {
 
         // Inspeciona o formato e os primeiros valores de cada saída.
         for (const [index, output] of outputs.entries()) {
-            results.push({
-                index,
-                shape: output.shape,
-                values: Array.from(await output.data()).slice(0, 20)
-            });
-
-            // Libera os tensores após extrair os dados.
-            output.dispose();
+            try {
+                results.push({
+                    index,
+                    shape: output.shape,
+                    values: Array.from(await output.data()).slice(0, 20)
+                });
+            } finally {
+                // Libera os tensores após extrair os dados.
+                output.dispose();
+            }
         }
 
         // Devolve os resultados para a Main Thread.
@@ -90,6 +98,9 @@ self.onmessage = async ({ data }) => {
             type: 'error',
             message: error.message
         });
+    } finally {
+        // Libera o ImageBitmap caso ocorra algum erro no processamento.
+        frame?.close();
     }
 };
 
