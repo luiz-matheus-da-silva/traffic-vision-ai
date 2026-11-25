@@ -34,7 +34,7 @@ class VideoService {
     async load(file) {
         // Valida: tem que existir e o tipo MIME precisa começar com "video/".
         if (!file || !file.type.startsWith('video/')) {
-            throw new Error('Arquivo de vídeo inválido.');
+            throw new Error('Invalid video file.');
         }
 
         // Descarta a URL do vídeo anterior (se houver) para não gastar memória.
@@ -58,7 +58,7 @@ class VideoService {
             // Falha: o navegador não conseguiu abrir o vídeo.
             const onLoadError = () => {
                 removeListeners();
-                reject(new Error('Não foi possível carregar o vídeo.'));
+                reject(new Error('Could not load the video.'));
             };
 
             // Remove os "ouvintes" de evento para não deixá-los pendurados.
@@ -94,7 +94,7 @@ class VideoService {
         // readyState diz quanto o vídeo já carregou. Precisamos de pelo menos
         // o frame atual disponível; senão a "foto" sairia vazia.
         if (this.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-            throw new Error('Vídeo ainda não possui um frame disponível.');
+            throw new Error('The video has no frame available yet.');
         }
 
         return createImageBitmap(this.video);

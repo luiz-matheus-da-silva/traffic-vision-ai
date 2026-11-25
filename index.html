@@ -1,46 +1,414 @@
-
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en" data-bs-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TrafficVision AI - Vehicle detection in video with YOLOv5n and TensorFlow.js.">
 
     <title>TrafficVision AI</title>
 
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.9/dist/css/bootstrap.min.css"
         rel="stylesheet"
-    />
+    >
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        rel="stylesheet"
+    >
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap"
+        rel="stylesheet"
+    >
+
+    <style>
+        :root,
+        [data-bs-theme="dark"] {
+            /* Paleta: ardósia escura + âmbar de sinal de trânsito */
+            --tv-accent: #F5A524;
+            --tv-accent-strong: #D98B0B;
+            --tv-accent-soft: rgba(245, 165, 36, .14);
+            --tv-teal: #2DD4BF;
+
+            --bs-body-bg: #0d1520;
+            --bs-body-color: #e6edf3;
+            --bs-secondary-color: #8da0b3;
+            --bs-border-color: #22344a;
+            --bs-card-bg: #142031;
+            --bs-card-cap-bg: #182739;
+            --bs-primary: var(--tv-accent);
+            --bs-primary-rgb: 245, 165, 36;
+            --bs-link-color: var(--tv-accent);
+        }
+
+        .btn-primary,
+        .btn-outline-primary:hover {
+            --bs-btn-color: #1b1304;
+            --bs-btn-bg: var(--tv-accent);
+            --bs-btn-border-color: var(--tv-accent);
+            --bs-btn-hover-color: #1b1304;
+            --bs-btn-hover-bg: #ffb83d;
+            --bs-btn-hover-border-color: #ffb83d;
+            --bs-btn-active-color: #1b1304;
+            --bs-btn-active-bg: var(--tv-accent-strong);
+            --bs-btn-active-border-color: var(--tv-accent-strong);
+        }
+
+        .btn-outline-primary {
+            --bs-btn-color: var(--tv-accent);
+            --bs-btn-border-color: var(--tv-accent);
+            --bs-btn-hover-color: #1b1304;
+            --bs-btn-hover-bg: var(--tv-accent);
+            --bs-btn-hover-border-color: var(--tv-accent);
+            --bs-btn-active-color: #1b1304;
+            --bs-btn-active-bg: var(--tv-accent-strong);
+        }
+
+        .form-range, .form-check-input:checked {
+            accent-color: var(--tv-accent);
+        }
+
+        .form-check-input:checked {
+            background-color: var(--tv-accent);
+            border-color: var(--tv-accent);
+        }
+
+        .card { --bs-card-border-color: var(--bs-border-color); }
+
+        .list-group { --bs-list-group-bg: transparent; --bs-list-group-border-color: var(--bs-border-color); }
+
+        :root {
+            --bs-body-font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --bs-body-font-size: .9375rem;
+            --bs-body-line-height: 1.55;
+            --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
+        }
+
+        body { font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; }
+
+        h1, h2, h3, h4, h5, h6 { letter-spacing: -.015em; }
+
+        /* Números dos indicadores em fonte monoespaçada. */
+        .stat-number { font-family: var(--font-mono); letter-spacing: -.03em; }
+
+        .stat-tint { background: var(--tv-accent-soft); color: var(--tv-accent); }
+
+        .stat-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            display: grid;
+            place-items: center;
+            border-radius: .5rem;
+            font-size: 1.15rem;
+        }
+
+        /* Números alinhados em colunas: valores que mudam não "pulam". */
+        .tabular { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: .9em; }
+
+        /* Estado vazio sobre o vídeo, some quando um vídeo é carregado. */
+        .model-loading {
+            position: fixed;
+            inset: 0;
+            z-index: 1050;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: .75rem;
+            background: rgba(13, 21, 32, .92);
+            text-align: center;
+        }
+
+        .model-loading[hidden] { display: none; }
+
+        .video-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            background: #000;
+        }
+
+        /* A página ocupa exatamente a altura da janela, sem scroll. */
+        html, body { height: 100%; }
+        body { overflow: hidden; }
+
+        .app { height: 100vh; display: flex; flex-direction: column; padding: 1rem 1.25rem 2rem; gap: 1rem; }
+        .app-body { flex: 1; min-height: 0; }
+        .app-col { height: 100%; display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+        .video-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+        .video-stage { flex: 1; min-height: 0; }
+        .recent-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+        /* Em telas estreitas o layout empilha e a página volta a rolar. */
+        @media (max-width: 1199.98px) {
+            body { overflow: auto; }
+            .app { height: auto; }
+            .app-col { height: auto; }
+            .video-stage { aspect-ratio: 16 / 9; flex: none; }
+            .recent-card { flex: none; }
+        }
+
+        .recent-list { flex: 1; min-height: 0; overflow-y: auto; }
+
+        /* Respeita quem pede menos movimento no sistema. */
+        @media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; }
+        }
+    </style>
 </head>
-<body class="bg-dark text-white">
 
-    <main class="container py-5">
-        <h1 class="mb-4">TrafficVision AI</h1>
+<body>
 
-        <div class="mb-3">
-            <label for="video-input" class="form-label">
-                Selecione um vídeo
-            </label>
+    <!-- Bloqueia a interface até o modelo terminar de carregar. -->
+    <div id="model-loading" class="model-loading" role="alert" aria-live="assertive">
+        <div class="spinner-border text-primary" aria-hidden="true"></div>
+        <p id="model-loading-text" class="mb-0 fw-semibold">Loading model...</p>
+        <p class="small text-secondary mb-0">The first load downloads the model and warms up the GPU.</p>
+    </div>
 
-            <input
-                type="file"
-                id="video-input"
-                class="form-control"
-                accept="video/*"
-            />
+    <main class="app">
+
+        <!-- Cabeçalho -->
+        <header class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+
+            <div>
+                <h1 class="h3 fw-bold mb-1"><i class="bi bi-camera-video me-2 text-primary" aria-hidden="true"></i>Traffic Monitoring</h1>
+                <p class="text-secondary mb-0">Vehicle detection and video analysis</p>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge" style="background: var(--tv-accent-soft); color: var(--tv-accent);">YOLOv5n</span>
+
+                <input type="file" id="video-input" class="visually-hidden" accept="video/*">
+            </div>
+
+        </header>
+
+        <!-- Resumo do frame atual -->
+        <section class="row g-3" aria-label="Detections in current frame">
+
+            <div class="col-6 col-lg-3">
+                <div class="card h-100">
+                    <div class="card-body py-2 d-flex align-items-center gap-3">
+                        <span class="stat-icon stat-tint"><i class="bi bi-bullseye" aria-hidden="true"></i></span>
+                        <div>
+                            <div id="stat-total" class="h3 fw-bold mb-0 stat-number">0</div>
+                            <div class="small text-secondary">Detections</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-6 col-lg-3">
+                <div class="card h-100">
+                    <div class="card-body py-2 d-flex align-items-center gap-3">
+                        <span class="stat-icon stat-tint"><i class="bi bi-car-front" aria-hidden="true"></i></span>
+                        <div>
+                            <div id="stat-car" class="h3 fw-bold mb-0 stat-number">0</div>
+                            <div class="small text-secondary">Cars</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-6 col-lg-3">
+                <div class="card h-100">
+                    <div class="card-body py-2 d-flex align-items-center gap-3">
+                        <span class="stat-icon stat-tint"><i class="bi bi-truck" aria-hidden="true"></i></span>
+                        <div>
+                            <div id="stat-truck" class="h3 fw-bold mb-0 stat-number">0</div>
+                            <div class="small text-secondary">Trucks</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-6 col-lg-3">
+                <div class="card h-100">
+                    <div class="card-body py-2 d-flex align-items-center gap-3">
+                        <span class="stat-icon stat-tint"><i class="bi bi-bus-front" aria-hidden="true"></i></span>
+                        <div>
+                            <div id="stat-bus" class="h3 fw-bold mb-0 stat-number">0</div>
+                            <div class="small text-secondary">Buses</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <div class="row g-3 app-body">
+
+            <!-- Coluna principal -->
+            <div class="col-12 col-xl-8 app-col">
+
+                <!-- Vídeo -->
+                <section class="card video-card">
+
+                    <div class="position-relative bg-black video-stage rounded-top overflow-hidden">
+
+                        <video
+                            id="source-video"
+                            class="w-100 h-100 d-block object-fit-contain"
+                            controls
+                            playsinline
+                        ></video>
+
+                        <canvas
+                            id="detection-canvas"
+                            class="position-absolute top-0 start-0 w-100 h-100 pe-none object-fit-contain"
+                        ></canvas>
+
+                        <div id="video-empty" class="video-empty text-center px-3">
+                            <i class="bi bi-film fs-1 text-secondary" aria-hidden="true"></i>
+                            <p class="mb-0 fw-semibold">No video loaded</p>
+                            <p class="small text-secondary mb-2">Select a video file to start detecting vehicles.</p>
+                            <label for="video-input" class="btn btn-outline-primary btn-sm mb-0">
+                                <i class="bi bi-upload me-1" aria-hidden="true"></i>Select video
+                            </label>
+                        </div>
+
+                    </div>
+
+                    <div class="card-footer d-flex align-items-center gap-2">
+                        <span id="status-dot" class="d-inline-block rounded-circle bg-secondary"
+                              style="width: 8px; height: 8px;"></span>
+                        <p id="status" class="small text-secondary mb-0" role="status" aria-live="polite">
+                            Loading model...
+                        </p>
+
+                        <label for="video-input" class="btn btn-outline-primary btn-sm ms-auto mb-0">
+                            <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Change video
+                        </label>
+                    </div>
+
+                </section>
+
+
+            </div>
+
+            <!-- Painel lateral -->
+            <aside class="col-12 col-xl-4 app-col">
+
+
+                <!-- Configurações -->
+                <section class="card">
+
+                    <div class="card-header">
+                        <h2 class="h6 fw-semibold mb-0"><i class="bi bi-sliders me-2 text-secondary" aria-hidden="true"></i>Detection settings</h2>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <label for="confidence-range" class="form-label small mb-0">
+                                    Confidence threshold
+                                </label>
+                                <output id="confidence-value" for="confidence-range"
+                                        class="small fw-semibold tabular">40%</output>
+                            </div>
+
+                            <input type="range" class="form-range" id="confidence-range"
+                                   min="25" max="95" step="5" value="40">
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <label for="fps-range" class="form-label small mb-0">Target FPS</label>
+                                <output id="fps-value" for="fps-range"
+                                        class="small fw-semibold tabular">5</output>
+                            </div>
+
+                            <input type="range" class="form-range" id="fps-range"
+                                   min="1" max="15" step="1" value="5">
+                        </div>
+
+                        <fieldset>
+                            <legend class="form-label small">Vehicle classes</legend>
+
+                            <div class="d-flex flex-wrap gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input class-toggle" type="checkbox" id="class-car" data-class="car" checked>
+                                    <label class="form-check-label" for="class-car">Car</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input class-toggle" type="checkbox" id="class-truck" data-class="truck" checked>
+                                    <label class="form-check-label" for="class-truck">Truck</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input class-toggle" type="checkbox" id="class-bus" data-class="bus" checked>
+                                    <label class="form-check-label" for="class-bus">Bus</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input class-toggle" type="checkbox" id="class-motorcycle" data-class="motorcycle" checked>
+                                    <label class="form-check-label" for="class-motorcycle">Motorcycle</label>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                    </div>
+
+                </section>
+
+                <!-- Status do modelo -->
+                <section class="card">
+
+                    <div class="card-header">
+                        <h2 class="h6 fw-semibold mb-0"><i class="bi bi-cpu me-2 text-secondary" aria-hidden="true"></i>Model status</h2>
+                    </div>
+
+                    <dl class="card-body small mb-0">
+                        <div class="d-flex justify-content-between mb-2">
+                            <dt class="fw-normal text-secondary">Backend</dt>
+                            <dd id="backend-name" class="fw-semibold mb-0">WebGL</dd>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <dt class="fw-normal text-secondary">Model</dt>
+                            <dd class="fw-semibold mb-0">YOLOv5n</dd>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <dt class="fw-normal text-secondary">Target FPS</dt>
+                            <dd id="fps-status" class="fw-semibold mb-0 tabular">5</dd>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <dt class="fw-normal text-secondary">Latency</dt>
+                            <dd id="latency-status" class="fw-semibold mb-0 tabular">-</dd>
+                        </div>
+                    </dl>
+
+                </section>
+
+                <!-- Detecções recentes -->
+                <section class="card recent-card">
+
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h2 class="h6 fw-semibold mb-0"><i class="bi bi-clock-history me-2 text-secondary" aria-hidden="true"></i>Recent detections</h2>
+                        <span id="recent-count" class="small text-secondary tabular">0</span>
+                    </div>
+
+                    <div class="recent-list">
+                        <p id="recent-empty" class="small text-secondary p-3 mb-0">
+                            Detections will appear here while the video plays.
+                        </p>
+
+                        <ul id="recent-list" class="list-group list-group-flush"></ul>
+                    </div>
+
+                </section>
+
+            </aside>
+
         </div>
 
-        <div class="ratio ratio-16x9 bg-black rounded overflow-hidden">
-            <video
-                id="source-video"
-                controls
-                playsinline
-            ></video>
-        </div>
-
-        <p id="status" class="mt-3 text-secondary">
-            Aguardando vídeo...
-        </p>
     </main>
 
     <script type="module" src="/src/js/main.js"></script>
