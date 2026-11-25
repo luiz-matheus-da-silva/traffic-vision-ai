@@ -43,3 +43,6 @@ temp/
 # Vite
 .vite/
 
+
+# Challenge requirements (local only)
+desafio_visao_computacional_requisitos.pdf
