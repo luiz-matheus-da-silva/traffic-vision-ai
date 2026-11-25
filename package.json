@@ -1,0 +1,36 @@
+
+{
+  "name": "traffic-vision-ai",
+  "version": "1.0.0",
+  "description": "AI-powered vehicle detection, tracking, and counting system using YOLOv5n, TensorFlow.js, and computer vision.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luiz-matheus-da-silva/traffic-vision-ai.git"
+  },
+  "keywords": [
+    "computer-vision",
+    "yolov5",
+    "tensorflow-js",
+    "vehicle-detection",
+    "vehicle-tracking"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@tensorflow/tfjs-backend-webgl": "^4.22.0",
+    "bootstrap": "^5.3.9"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}

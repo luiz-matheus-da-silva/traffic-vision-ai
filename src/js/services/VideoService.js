@@ -1,0 +1,1 @@
+// Carregar, reproduzir e extrair frames do vídeo

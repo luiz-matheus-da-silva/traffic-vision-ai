@@ -1,0 +1,1 @@
+// Desenhar bounding boxes, classes e confiança
