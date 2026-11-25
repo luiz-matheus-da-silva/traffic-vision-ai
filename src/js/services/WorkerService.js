@@ -1,1 +1,0 @@
-// 	Criar Worker e gerenciar mensagens

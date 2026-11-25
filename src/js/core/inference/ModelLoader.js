@@ -9,7 +9,9 @@ import * as tf from '@tensorflow/tfjs';
 const MODEL_PATH = '/models/yolov5n_web_model/model.json';
 // labels.json: lista com o nome de cada classe que o modelo conhece.
 const LABELS_PATH = '/models/yolov5n_web_model/labels.json';
-const CLASS_THRESHOLD = 0.5;
+import { MODEL_CONFIG } from '../../config/ModelConfig.js';
+
+const CLASS_THRESHOLD = MODEL_CONFIG.confidenceThreshold;
 
 /**
  * Carrega o modelo YOLOv5n e suas classes.
@@ -25,7 +27,7 @@ async function loadModelAndLabels() {
 
     // response.ok é false se o servidor respondeu com erro (ex.: 404).
     if (!response.ok) {
-        throw new Error(`Falha ao carregar labels: ${response.status}`);
+        throw new Error(`Failed to load labels: ${response.status}`);
     }
 
     const labels = await response.json(); // converte o texto JSON em array
