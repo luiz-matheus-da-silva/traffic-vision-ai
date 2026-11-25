@@ -1,98 +1,191 @@
-// ============================================================================
-// DetectionProcessor.js — Pós-processamento
-//
-// O modelo devolve listas soltas de números (caixas, notas, classes). Aqui
-// transformamos isso em objetos fáceis de usar, descartando o que for inválido
-// ou pouco confiável.
-// ============================================================================
 
-// Confiança mínima: detecções com nota abaixo de 0.5 (50%) são ignoradas.
-const CLASS_THRESHOLD = 0.5;
+/**
+ * DetectionProcessor.js — Pós-processamento das detecções.
+ *
+ * O YOLOv5n retorna arrays numéricos contendo coordenadas, confiança
+ * e identificadores das classes detectadas.
+ *
+ * Este módulo transforma esses resultados em objetos estruturados,
+ * valida as detecções e recupera as coordenadas do frame original,
+ * desfazendo a transformação aplicada pelo Letterbox.
+ */
+
+/**
+ * Converte as coordenadas normalizadas do modelo para coordenadas
+ * em pixels do vídeo original.
+ *
+ * O Letterbox adiciona padding à imagem para preencher o espaço
+ * esperado pelo modelo. Por isso, precisamos remover esse padding
+ * e desfazer a escala aplicada durante o pré-processamento.
+ *
+ * @param {Object} boundingBox - Coordenadas normalizadas do modelo.
+ * @param {Object} metadata - Metadados do pré-processamento.
+ * @returns {Object} Bounding box em pixels no frame original.
+ */
+function restoreOriginalCoordinates(boundingBox, metadata) {
+    const {
+        originalWidth,
+        originalHeight,
+        cropX = 0,
+        cropY = 0,
+        targetWidth,
+        targetHeight,
+        scale,
+        paddingX,
+        paddingY
+    } = metadata;
+
+    // Converte as coordenadas normalizadas (0 a 1) para pixels da entrada do
+    // modelo (0 a 640). O modelo exportado já devolve [xMin, yMin, xMax, yMax].
+    const modelXMin = boundingBox.xMin * targetWidth;
+    const modelYMin = boundingBox.yMin * targetHeight;
+    const modelXMax = boundingBox.xMax * targetWidth;
+    const modelYMax = boundingBox.yMax * targetHeight;
+
+    // Remove o padding e desfaz o redimensionamento proporcional.
+    // Soma o deslocamento do recorte para voltar ao frame completo.
+    const xMin = (modelXMin - paddingX) / scale + cropX;
+    const yMin = (modelYMin - paddingY) / scale + cropY;
+    const xMax = (modelXMax - paddingX) / scale + cropX;
+    const yMax = (modelYMax - paddingY) / scale + cropY;
+
+    // Limita as coordenadas às dimensões do vídeo original.
+    return {
+        xMin: Math.max(0, Math.min(xMin, originalWidth)),
+        yMin: Math.max(0, Math.min(yMin, originalHeight)),
+        xMax: Math.max(0, Math.min(xMax, originalWidth)),
+        yMax: Math.max(0, Math.min(yMax, originalHeight))
+    };
+}
 
 /**
  * Transforma as saídas do YOLOv5n em detecções estruturadas.
  *
- * Os parâmetros usam desestruturação: em vez de receber um objeto `data` e
- * escrever data.boxes, já pegamos `boxes`, `scores` etc. direto.
- *
- * @param {Object} data
- * @param {number[]} data.boxes   - Lista plana de coordenadas: [x1,y1,x2,y2, x1,y1,x2,y2, ...]
- * @param {number[]} data.scores  - Confiança de cada detecção.
- * @param {number[]} data.classes - Id da classe de cada detecção.
- * @param {number} data.numDetections - Quantas detecções o modelo considera válidas.
- * @param {string[]} labels - Nomes das classes (o id é a posição na lista).
- * @returns {Array<Object>} Detecções válidas.
+ * @param {Object} data - Dados extraídos dos tensores do modelo.
+ * @param {number[]} data.boxes - Coordenadas das bounding boxes.
+ * @param {number[]} data.scores - Confiança de cada detecção.
+ * @param {number[]} data.classes - Identificadores das classes.
+ * @param {number} data.numDetections - Quantidade de detecções válidas.
+ * @param {string[]} labels - Nomes das classes disponíveis no modelo.
+ * @param {number} classThreshold - Confiança mínima para aceitar uma detecção.
+ * @param {Object} metadata - Metadados do pré-processamento Letterbox.
+ * @returns {Array<Object>} Lista de detecções válidas.
  */
 function processDetections(
     { boxes, scores, classes, numDetections },
-    labels
+    labels,
+    classThreshold,
+    metadata
 ) {
     const detections = [];
 
-    // O modelo devolve arrays de tamanho fixo, geralmente com "lixo" no final.
-    // Usamos o menor entre os valores para nunca ler fora dos limites.
-    // (boxes tem 4 números por objeto, por isso dividimos por 4.)
+    // Limita a quantidade de iterações aos dados realmente disponíveis.
     const detectionCount = Math.min(
-        numDetections,
+        Math.floor(numDetections),
         scores.length,
         classes.length,
-        boxes.length / 4
+        Math.floor(boxes.length / 4)
     );
 
     for (let detectionIndex = 0; detectionIndex < detectionCount; detectionIndex++) {
         const confidence = scores[detectionIndex];
         const classId = classes[detectionIndex];
 
-        // `continue` pula para a próxima detecção. Descartamos se:
-        //  - a confiança não for um número válido (NaN, Infinity);
-        //  - a confiança for menor que o mínimo;
-        //  - o id da classe não for inteiro ou for negativo.
+        // Descarta resultados inválidos ou abaixo da confiança mínima.
         if (
             !Number.isFinite(confidence) ||
-            confidence < CLASS_THRESHOLD ||
+            confidence < classThreshold ||
             !Number.isInteger(classId) ||
             classId < 0
         ) {
             continue;
         }
 
-        // Traduz o id numérico (ex.: 2) para o nome (ex.: "car").
+        // Recupera o nome correspondente ao identificador da classe.
         const className = labels[classId];
 
-        if (!className) continue; // id sem nome correspondente
+        if (!className) continue;
 
-        // As coordenadas ficam em sequência no array: a detecção N ocupa as
-        // posições de N*4 até N*4+3. `slice` recorta esse pedaço e a
-        // desestruturação separa nas 4 variáveis.
-        //   (x1, y1) = canto superior esquerdo
-        //   (x2, y2) = canto inferior direito
-        const [x1, y1, x2, y2] = boxes.slice(
+        // Extrai as quatro coordenadas da bounding box.
+        const [xMin, yMin, xMax, yMax] = boxes.slice(
             detectionIndex * 4,
             (detectionIndex + 1) * 4
         );
 
-        // Todas as coordenadas precisam ser números válidos.
-        if (![x1, y1, x2, y2].every(Number.isFinite)) {
+        // Verifica se todas as coordenadas são números válidos.
+        if (![xMin, yMin, xMax, yMax].every(Number.isFinite)) {
             continue;
         }
 
-        // Uma caixa válida tem largura e altura positivas.
-        if (x2 <= x1 || y2 <= y1) continue;
+        // Descarta caixas sem largura ou altura.
+        if (xMax <= xMin || yMax <= yMin) {
+            continue;
+        }
 
+        // Recupera as coordenadas em pixels do vídeo original.
+        const boundingBox = restoreOriginalCoordinates(
+            { xMin, yMin, xMax, yMax },
+            metadata
+        );
+
+        // Descarta caixas que ficaram inválidas após a conversão.
+        if (
+            boundingBox.xMax <= boundingBox.xMin ||
+            boundingBox.yMax <= boundingBox.yMin
+        ) {
+            continue;
+        }
+
+        // Adiciona a detecção estruturada à lista de resultados.
         detections.push({
             classId,
             className,
             confidence,
-            boundingBox: {
-                xMin: x1,
-                yMin: y1,
-                xMax: x2,
-                yMax: y2
-            }
+            boundingBox
         });
     }
 
     return detections;
 }
 
-export { processDetections };
+/**
+ * Calcula a interseção sobre união (IoU) entre duas caixas.
+ */
+function calculateIoU(a, b) {
+    const interWidth = Math.min(a.xMax, b.xMax) - Math.max(a.xMin, b.xMin);
+    const interHeight = Math.min(a.yMax, b.yMax) - Math.max(a.yMin, b.yMin);
+
+    if (interWidth <= 0 || interHeight <= 0) return 0;
+
+    const intersection = interWidth * interHeight;
+    const areaA = (a.xMax - a.xMin) * (a.yMax - a.yMin);
+    const areaB = (b.xMax - b.xMin) * (b.yMax - b.yMin);
+
+    return intersection / (areaA + areaB - intersection);
+}
+
+/**
+ * Une detecções de várias passadas (frame inteiro + recortes) e remove
+ * duplicatas da mesma classe, mantendo a de maior confiança.
+ *
+ * @param {Array<Object>} detections - Detecções de todas as passadas.
+ * @param {number} iouThreshold - Sobreposição a partir da qual são duplicatas.
+ */
+function mergeDetections(detections, iouThreshold = 0.5) {
+    const sorted = [...detections].sort((a, b) => b.confidence - a.confidence);
+    const kept = [];
+
+    for (const candidate of sorted) {
+        const isDuplicate = kept.some(
+            (other) =>
+                other.classId === candidate.classId &&
+                calculateIoU(other.boundingBox, candidate.boundingBox) > iouThreshold
+        );
+
+        if (!isDuplicate) kept.push(candidate);
+    }
+
+    return kept;
+}
+
+export { processDetections, mergeDetections };
